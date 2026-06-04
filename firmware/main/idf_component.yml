@@ -1,0 +1,26 @@
+## ESP-IDF Component Dependencies
+## Phase 1: HLW8032 driver from GitHub
+dependencies:
+  ## HLW8032 Energy Metering IC Driver (open-source)
+  ## https://github.com/ucukertz/IDF-HLW8032
+  ## Provides: hlw8032_read_data(), hlw8032_init_uart()
+  ## Not on component registry — must clone manually or use git dependency.
+  ##
+  ## Option A (git dependency, preferred):
+  #  ucukertz/idf-hlw8032:
+  #    git: https://github.com/ucukertz/IDF-HLW8032.git
+  #    version: master
+  ##
+  ## Option B (manual): Clone into firmware/components/idf-hlw8032/
+  ##   git clone https://github.com/ucukertz/IDF-HLW8032 firmware/components/idf-hlw8032
+  ##
+  ## For Phase 1 MVP, we provide a thin adapter (power_meter.c)
+  ## that wraps the idf-hlw8032 API. When you have git access:
+  ##   1. Uncomment the dependency above
+  ##   2. Delete firmware/components/power_meter/power_meter_hlw8032_adapter.c
+  ##   3. Run: idf.py reconfigure
+  ##
+  ## Phase 2 dependencies (uncomment when needed):
+  #  lvgl/lvgl: "^9.3.0"
+  #  espressif/esp_lvgl_port: "^2.6.2"
+  #  espp/ble_gatt_server: "^1.0.31"

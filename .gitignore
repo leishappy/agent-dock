@@ -1,0 +1,45 @@
+# === Claude Code ===
+memory/
+.claude/
+
+# === 编译产物 ===
+build/
+dist/
+.pio/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# === ESP-IDF ===
+build/
+*.elf
+*.map
+*.bin
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# === Node ===
+node_modules/
+package-lock.json
+
+# === 操作系统 ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# === IDE ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === 嘉立创 EDA ===
+*.eprj2.bak
+*.eprj2.tmp
