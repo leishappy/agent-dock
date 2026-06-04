@@ -1,0 +1,3 @@
+# AgentDock PC 端
+
+pyserial>=3.5

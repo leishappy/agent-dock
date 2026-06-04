@@ -42,5 +42,7 @@ Thumbs.db
 *.code-workspace
 
 # === 嘉立创 EDA ===
+*.eprj2
 *.eprj2.bak
 *.eprj2.tmp
+*_backup/
