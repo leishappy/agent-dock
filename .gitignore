@@ -1,6 +1,7 @@
 # === Claude Code ===
 memory/
 .claude/
+CLAUDE.md
 
 # === 编译产物 ===
 build/
