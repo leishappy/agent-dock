@@ -107,7 +107,18 @@ def parse_event(line):
 class JSONLTailer:
     def __init__(self, path):
         self.path = path
-        self.pos = 0
+        # 跳到文件末尾附近(跳过历史)，只看最新事件
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                start = max(0, size - 8192)
+                f.seek(start)
+                if start > 0:
+                    f.readline()  # 丢弃不完整的第一行
+                self.pos = f.tell()
+        except Exception:
+            self.pos = 0
 
     def read_new_events(self):
         results = []
@@ -184,29 +195,34 @@ async def run(host="agentdock.local", port=80, project_dir=None):
                     # read latest events
                     if tailer:
                         events = tailer.read_new_events()
+                        # debug: show event count and types
                         if events:
-                            evt = events[-1]  # only the last
-                            now = time.time()
-                            if evt["status"] != prev_status and (now - last_send) > send_min_gap:
-                                prev_status = evt["status"]
-                                last_send = now
-                                payload = json.dumps({
-                                    "t": "agent",
-                                    "status": evt["status"],
-                                    "details": evt["details"],
-                                    "ts": int(now),
-                                })
-                                print(f"  -> SEND: {payload}")  # debug
-                                await ws.send(payload)
-                                if evt["status"] == "tool":
-                                    await ws.send(json.dumps({
-                                        "t": "notify",
-                                        "title": "Tool Call",
-                                        "body": evt["details"],
-                                        "level": "info",
-                                    }))
-                                icon = {"idle": "-", "thinking": "T", "tool": ">", "responding": "R"}
-                                print(f"[{icon.get(evt['status'], '?')}] {evt['status']:12s} {evt['details']}")
+                            types = [e["status"] for e in events]
+                            print(f"  [DEBUG] pos={tailer.pos} events={len(events)} types={types}")
+                        if events:
+                            # 按时间顺序处理，每条状态变化都发送（0.5s 间隔保护）
+                            for evt in events:
+                                now = time.time()
+                                if evt["status"] != prev_status and (now - last_send) > send_min_gap:
+                                    prev_status = evt["status"]
+                                    last_send = now
+                                    payload = json.dumps({
+                                        "t": "agent",
+                                        "status": evt["status"],
+                                        "details": evt["details"],
+                                        "ts": int(now),
+                                    })
+                                    print(f"  -> SEND: {payload}")
+                                    await ws.send(payload)
+                                    if evt["status"] == "tool":
+                                        await ws.send(json.dumps({
+                                            "t": "notify",
+                                            "title": "Tool Call",
+                                            "body": evt["details"],
+                                            "level": "info",
+                                        }))
+                                    icon = {"idle": "-", "thinking": "T", "tool": ">", "responding": "R"}
+                                    print(f"[{icon.get(evt['status'], '?')}] {evt['status']:12s} {evt['details']}")
 
                     if not tailer and prev_status != "idle":
                         prev_status = "idle"
