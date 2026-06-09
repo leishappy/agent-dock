@@ -305,7 +305,7 @@ void WebServer::setupNormalRoutes() {
                   deserializeJson(doc, d, l);
                   Preferences prefs;
                   prefs.begin("config", false);
-                  if (doc.containsKey("city"))
+                  if (doc["city"].is<const char*>())
                       prefs.putString("city", doc["city"] | "Shenzhen");
                   prefs.end();
                   req->send(200, "application/json", "{\"ok\":true}");

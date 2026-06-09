@@ -80,24 +80,32 @@ def parse_event(line):
     if not isinstance(content, list):
         return None
 
+    result = None
     for block in content:
         if isinstance(block, str):
             continue
         btype = block.get("type", "")
 
         if btype == "thinking":
-            return {"status": "thinking", "details": "Thinking"}
-
-        if btype == "tool_use":
+            result = {"status": "thinking", "details": "Thinking"}
+        elif btype == "tool_use":
             name = block.get("name", "")
             detail = TOOL_LABELS.get(name, name or "Tool")
-            return {"status": "tool", "details": detail}
+            result = {"status": "tool", "details": detail}
+        elif btype == "text":
+            result = {"status": "responding", "details": "Generating"}
 
-        if btype == "text":
-            return {"status": "responding", "details": "Generating"}
+    if result:
+        return result
 
     if evt.get("type") == "system" and evt.get("subtype") == "init":
         return {"status": "responding", "details": "Session start"}
+
+    # Session end markers → back to idle
+    if evt.get("type") in ("last-prompt", "ai-title", "mode", "permission-mode"):
+        return {"status": "idle", "details": "Session finished"}
+    if evt.get("type") == "system" and evt.get("subtype") == "away_summary":
+        return {"status": "idle", "details": "Session finished"}
 
     return None
 
@@ -167,7 +175,7 @@ async def run(host="agentdock.local", port=80, project_dir=None):
     last_hb = 0
     tailer = None
     last_file = None
-    send_min_gap = 0.5   # min seconds between sends
+    send_min_gap = 0.5
     last_send = 0
 
     while True:
@@ -195,34 +203,31 @@ async def run(host="agentdock.local", port=80, project_dir=None):
                     # read latest events
                     if tailer:
                         events = tailer.read_new_events()
-                        # debug: show event count and types
                         if events:
-                            types = [e["status"] for e in events]
-                            print(f"  [DEBUG] pos={tailer.pos} events={len(events)} types={types}")
-                        if events:
-                            # 按时间顺序处理，每条状态变化都发送（0.5s 间隔保护）
-                            for evt in events:
-                                now = time.time()
-                                if evt["status"] != prev_status and (now - last_send) > send_min_gap:
-                                    prev_status = evt["status"]
-                                    last_send = now
-                                    payload = json.dumps({
-                                        "t": "agent",
-                                        "status": evt["status"],
-                                        "details": evt["details"],
-                                        "ts": int(now),
-                                    })
-                                    print(f"  -> SEND: {payload}")
-                                    await ws.send(payload)
-                                    if evt["status"] == "tool":
-                                        await ws.send(json.dumps({
-                                            "t": "notify",
-                                            "title": "Tool Call",
-                                            "body": evt["details"],
-                                            "level": "info",
-                                        }))
-                                    icon = {"idle": "-", "thinking": "T", "tool": ">", "responding": "R"}
-                                    print(f"[{icon.get(evt['status'], '?')}] {evt['status']:12s} {evt['details']}")
+                            # 取最后一个有效状态 (代表当前最新状态)
+                            # 只发最后一个, 避免中间状态闪烁 + 间隔保护
+                            final_evt = events[-1]
+                            now = time.time()
+                            is_end = (final_evt.get("status") == "idle")
+                            if final_evt["status"] != prev_status and (is_end or (now - last_send) > send_min_gap):
+                                prev_status = final_evt["status"]
+                                last_send = now
+                                payload = json.dumps({
+                                    "t": "agent",
+                                    "status": final_evt["status"],
+                                    "details": final_evt["details"],
+                                    "ts": int(now),
+                                })
+                                await ws.send(payload)
+                                if final_evt["status"] == "tool":
+                                    await ws.send(json.dumps({
+                                        "t": "notify",
+                                        "title": "Tool Call",
+                                        "body": final_evt["details"],
+                                        "level": "info",
+                                    }))
+                                icon = {"idle": "-", "thinking": "T", "tool": ">", "responding": "R"}
+                                print(f"[{icon.get(final_evt['status'], '?')}] {final_evt['status']:12s} {final_evt['details']}")
 
                     if not tailer and prev_status != "idle":
                         prev_status = "idle"
