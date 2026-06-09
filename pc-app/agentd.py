@@ -101,6 +101,10 @@ def parse_event(line):
     if evt.get("type") == "system" and evt.get("subtype") == "init":
         return {"status": "responding", "details": "Session start"}
 
+    # Turn complete → waiting for user, back to idle
+    if evt.get("type") == "system" and evt.get("subtype") == "turn_duration":
+        return {"status": "idle", "details": "Waiting for input"}
+
     # Session end markers → back to idle
     if evt.get("type") in ("last-prompt", "ai-title", "mode", "permission-mode"):
         return {"status": "idle", "details": "Session finished"}
@@ -175,7 +179,6 @@ async def run(host="agentdock.local", port=80, project_dir=None):
     last_hb = 0
     tailer = None
     last_file = None
-    send_min_gap = 0.5
     last_send = 0
 
     while True:
@@ -204,30 +207,27 @@ async def run(host="agentdock.local", port=80, project_dir=None):
                     if tailer:
                         events = tailer.read_new_events()
                         if events:
-                            # 取最后一个有效状态 (代表当前最新状态)
-                            # 只发最后一个, 避免中间状态闪烁 + 间隔保护
-                            final_evt = events[-1]
-                            now = time.time()
-                            is_end = (final_evt.get("status") == "idle")
-                            if final_evt["status"] != prev_status and (is_end or (now - last_send) > send_min_gap):
-                                prev_status = final_evt["status"]
-                                last_send = now
+                            for evt in events:
+                                if evt["status"] == prev_status:
+                                    continue
+                                prev_status = evt["status"]
+                                now = time.time()
                                 payload = json.dumps({
                                     "t": "agent",
-                                    "status": final_evt["status"],
-                                    "details": final_evt["details"],
+                                    "status": evt["status"],
+                                    "details": evt["details"],
                                     "ts": int(now),
                                 })
                                 await ws.send(payload)
-                                if final_evt["status"] == "tool":
+                                if evt["status"] == "tool":
                                     await ws.send(json.dumps({
                                         "t": "notify",
                                         "title": "Tool Call",
-                                        "body": final_evt["details"],
+                                        "body": evt["details"],
                                         "level": "info",
                                     }))
                                 icon = {"idle": "-", "thinking": "T", "tool": ">", "responding": "R"}
-                                print(f"[{icon.get(final_evt['status'], '?')}] {final_evt['status']:12s} {final_evt['details']}")
+                                print(f"[{icon.get(evt['status'], '?')}] {evt['status']:12s} {evt['details']}")
 
                     if not tailer and prev_status != "idle":
                         prev_status = "idle"
